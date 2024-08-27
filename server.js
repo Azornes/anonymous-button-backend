@@ -1,47 +1,55 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const schedule = require('node-schedule');
-require('dotenv').config();
+const fs = require('fs').promises;
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect(process.env.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+const DATA_FILE = path.join(__dirname, 'clicks.json');
 
-const clickSchema = new mongoose.Schema({
-  userId: String,
-  date: { type: Date, default: Date.now }
-});
+async function readClicks() {
+  try {
+    const data = await fs.readFile(DATA_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (error) {
+    return {};
+  }
+}
 
-const Click = mongoose.model('Click', clickSchema);
+async function writeClicks(clicks) {
+  await fs.writeFile(DATA_FILE, JSON.stringify(clicks));
+}
 
 app.post('/click', async (req, res) => {
   const { userId } = req.body;
-  const today = new Date().setHours(0, 0, 0, 0);
-  const existingClick = await Click.findOne({ userId, date: { $gte: today } });
-  
-  if (existingClick) {
+  const clicks = await readClicks();
+  const today = new Date().toISOString().split('T')[0];
+
+  if (!clicks[today]) {
+    clicks[today] = [];
+  }
+
+  if (clicks[today].includes(userId)) {
     return res.status(400).json({ message: 'Już kliknąłeś dzisiaj.' });
   }
-  
-  const newClick = new Click({ userId });
-  await newClick.save();
-  
-  const totalClicks = await Click.countDocuments({ date: { $gte: today } });
-  
-  if (totalClicks === 5) {
+
+  clicks[today].push(userId);
+  await writeClicks(clicks);
+
+  if (clicks[today].length === 5) {
     // Tutaj dodaj kod do wysłania wiadomości na Messengera
     console.log('Wszyscy kliknęli!');
   }
-  
+
   res.json({ message: 'Kliknięcie zarejestrowane.' });
 });
 
 // Reset kliknięć o północy
 schedule.scheduleJob('0 0 * * *', async () => {
-  await Click.deleteMany({});
+  await writeClicks({});
 });
 
 const PORT = process.env.PORT || 5000;
