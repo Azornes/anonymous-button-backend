@@ -47,6 +47,15 @@ app.post('/click', async (req, res) => {
   res.json({ message: 'Kliknięcie zarejestrowane.' });
 });
 
+// Nowy endpoint, który zwraca liczbę kliknięć
+app.get('/clicks', async (req, res) => {
+  const clicks = await readClicks();
+  const today = new Date().toISOString().split('T')[0];
+
+  const clickCount = clicks[today] ? clicks[today].length : 0;
+  res.json({ clickCount });
+});
+
 // Reset kliknięć o północy
 schedule.scheduleJob('0 0 * * *', async () => {
   await writeClicks({});
